@@ -1,0 +1,23 @@
+{
+  "name": "canary_protocol",
+  "version": "1.0.0",
+  "description": "This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/esdras-santos/canary_protocol.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/esdras-santos/canary_protocol/issues"
+  },
+  "homepage": "https://github.com/esdras-santos/canary_protocol#readme",
+  "devDependencies": {
+    "hardhat": "^2.9.9"
+  }
+}
