@@ -201,7 +201,7 @@ describe('Canary protocol test', async function(){
         let roIndexes = []
         let confirmedRoyalties = 0
         let i = 0
-        // console.log(rightHolders)
+        console.log(rightHolders)
         for(rh of rightHolders){
             let deadline = await canaryFacet.holderDeadline(rights[0], rh)
             let rightsPeriod = await canaryFacet.rightsPeriodOf(rights[0], rh)
@@ -212,18 +212,20 @@ describe('Canary protocol test', async function(){
                 confirmedRoyalties += Number(dailyPrice) * Number(rightsPeriod)
                 let rightsOver = await canaryFacet.rightsOf(rh) 
                 let j = 0
-                // console.log(rightsOver)
+                console.log(rightsOver)
+                
                 for(ro of rightsOver){
-                    if(ro.value === rights[0].value){
+                    // console.log(ro.toString())
+                    // console.log(rights[0].toString())
+                    if(ro.toString() === rights[0].toString()){
                         roIndexes.push(j)
-                        
                     }
                     j++
                 }
             }
             i++
         }
-        // console.log(roIndexes)
+        console.log(rhindexes)
         tx = await canaryFacet.withdrawRoyalties(rights[0], deadlineList, roIndexes, rhindexes)
         await tx.wait()
         // console.log(confirmedRoyalties)
