@@ -1,8 +1,9 @@
-//SPDX-License-Identifier: Unlicense
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { LibDiamond } from  "../libraries/LibDiamond.sol";
+import "hardhat/console.sol";
 
 interface ERC721Metadata{
     function tokenURI(uint256 _tokenId) external view returns (string memory);
@@ -39,14 +40,12 @@ contract CanaryFacet {
         ds.rightsPeriod[_rightid][msg.sender] = _period;
         ds.rightsOver[msg.sender].push(_rightid);
         ds.deadline[_rightid][msg.sender] = block.timestamp + (1 days * _period);
-        // the bigger deadline will always be in front
-        if(ds.rightHolders[_rightid].length > 0 && block.timestamp + (1 days * _period) > ds.deadline[_rightid][ds.rightHolders[_rightid][0]]){
-            address aux = ds.rightHolders[_rightid][0];
-            ds.rightHolders[_rightid][0] = msg.sender;
-            ds.rightHolders[_rightid].push(aux);
-        } else {
-            ds.rightHolders[_rightid].push(msg.sender);
+        
+        if(block.timestamp + (1 days * _period) > ds.highestDeadline[_rightid]){
+            ds.highestDeadline[_rightid] = block.timestamp + (1 days * _period);
         }
+        ds.rightHolders[_rightid].push(msg.sender);
+        
         emit GetRight(_rightid, _period, msg.sender);
     }
 
@@ -77,13 +76,12 @@ contract CanaryFacet {
     {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         uint256 amountToWithdraw = 0;
-        
-        for(uint256 i; i <= _deadlinelist.length; i++){
-            require(ds.deadline[_rightid][_deadlinelist[i]] < block.timestamp, "NFT don't surpased the deadline yet");
-            require(ds.deadline[_rightid][_deadlinelist[i]] > 0, "NFT deadline needs to be above zero");
+        for(uint256 i; i < _deadlinelist.length; i++){
+            require(ds.deadline[_rightid][_deadlinelist[i]] < block.timestamp, "NFT do not exceeded the deadline yet");
             require(ds.rightsOver[_deadlinelist[i]][_roindexes[i]] == _rightid, "wrong index for rightid");
-            require(ds.rightHolders[_rightid][_rhindexes[i]] == _deadlinelist[i],"right holder address and deadline list address is not equal");
-            
+            require(ds.rightHolders[_rightid][_rhindexes[i]] == _deadlinelist[_deadlinelist.length-1-i],"right holder address and deadline list address is not equal");
+            require(ds.deadline[_rightid][_deadlinelist[i]] > 0, "NFT deadline needs to be above zero");
+
             uint256 amount = (ds.dailyPrice[_rightid] * ds.rightsPeriod[_rightid][_deadlinelist[i]]);
             // subtract the fee
             amountToWithdraw += amount - (amount * 500 / 10000);
@@ -105,13 +103,13 @@ contract CanaryFacet {
 
     function withdrawNFT(uint256 _rightid, uint256 _rightIndex) external isNFTOwner(_rightid) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        require(ds.deadline[_rightid][ds.rightHolders[_rightid][0]] < block.timestamp, "bigger right deadline should end before withdraw");
+        require(ds.highestDeadline[_rightid] < block.timestamp, "highest right deadline should end before withdraw");
         require(ds.isAvailable[_rightid] == false, "NFT should be unavailable");
         require( ds.properties[msg.sender][_rightIndex] == _rightid, "wrong index for collection address");
         address erc721 = address(uint160(uint256(ds.rightsOrigin[_rightid][0])));
         uint256 nftid = uint256(ds.rightsOrigin[_rightid][1]);
         _burn(_rightid, _rightIndex);
-        
+        ds.highestDeadline[_rightid] = 0;
         IERC721 e721 = IERC721(erc721);
         e721.transferFrom(address(this), msg.sender, nftid);
     }
@@ -135,7 +133,7 @@ contract CanaryFacet {
         ds.isAvailable[_rightid] = _available;
     }
 
-    function verifyRight(uint256 _rightid, address _platform) external returns(bool){
+    function verifyRight(uint256 _rightid, address _platform) external{
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         require(ds.rightsPeriod[_rightid][_platform] == 0, "the platform cannot be the right holder");
         require(ds.rightsPeriod[_rightid][msg.sender] > 0, "sender is not the right holder");
@@ -185,6 +183,12 @@ contract CanaryFacet {
         ds.properties[msg.sender].pop();
         ds.rightUri[_rightid] = "";
         ds.owner[_rightid] = address(0x00);
+    }
+
+    function setGovernanceToken(address _newToken) external{
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        require(ds.contractOwner == msg.sender);
+        ds.governanceToken = _newToken;
     }
 
     function currentTreasury() external view returns (uint256){

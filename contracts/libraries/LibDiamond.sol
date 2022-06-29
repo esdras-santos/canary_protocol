@@ -30,6 +30,7 @@ library LibDiamond {
         address governanceToken;
         address governor;
         uint256[] availableRights;
+        mapping (uint256=>uint256) highestDeadline;
         mapping (address=>uint256) dividends;
         // tracks price before approval of the proposal
         mapping (uint256=>uint256) beforeProposal;
