@@ -9,7 +9,7 @@ interface ERC721Metadata{
     function tokenURI(uint256 _tokenId) external view returns (string memory);
 }
 
-interface CanaryToken{
+interface Token{
     function mint(address _platform, uint256 _amount) external;
     function burn(address _platform, uint256 _amount) external;
 }
@@ -140,7 +140,7 @@ contract CanaryFacet {
         require(ds.deadline[_rightid][msg.sender] > block.timestamp,"has exceeded the right time");
         require(ds.validated[_rightid][_platform][msg.sender] == false, "rightid and right holder are already validated");
         ds.validated[_rightid][_platform][msg.sender] = true;
-        CanaryToken ct = CanaryToken(ds.governanceToken);
+        Token ct = Token(ds.governanceToken);
         ct.mint(_platform, ds.dailyPrice[_rightid]/2);
     }
 

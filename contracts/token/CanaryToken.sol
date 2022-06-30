@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
 
-contract GovernanceToken is ERC20Votes {
+contract CanaryToken is ERC20Votes {
   uint256 public s_maxSupply = 100000000e18;
   address owner;
 

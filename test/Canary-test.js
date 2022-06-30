@@ -1,5 +1,4 @@
 const {assert, expect} = require('chai')
-const { ethers } = require('ethers')
 const { deployDiamond } = require('../scripts/deploy')
 const { deployCanaryToken } = require('../scripts/deployCanaryToken')
 const { deployCollection } = require('../scripts/deployCollection')
@@ -298,6 +297,43 @@ describe('Canary protocol test', async function(){
         tx = await canaryFacet.setGovernanceToken(canaryTokenAddress)
         await tx.wait()
 
-        tx = await
+        let dailyPrice = await canaryFacet.dailyPriceOf(rights[2])
+        tx = await canaryFacet.connect(accounts[4]).getRights(rights[2], '1', {value: `${Number(dailyPrice)*1}`})
+        await tx.wait()
+
+        await expect(
+            canaryFacet.verifyRight(rights[2], accounts[4].address)
+        ).to.be.revertedWith('the platform cannot be the right holder')
+
+        await expect(
+            canaryFacet.connect(accounts[5]).verifyRight(rights[2], accounts[6].address)
+        ).to.be.revertedWith('sender is not the right holder')
+
+        var currentDateTime = new Date();
+        await network.provider.send("evm_setNextBlockTimestamp", [(currentDateTime.getTime()/ 1000) + (86400 * 34)])
+        await network.provider.send("evm_mine")
+
+        await expect(
+            canaryFacet.connect(accounts[4]).verifyRight(rights[2], accounts[6].address)
+        ).to.be.revertedWith('has exceeded the right time')
+
+        tx = await canaryFacet.connect(accounts[5]).getRights(rights[2], '1', {value: `${Number(dailyPrice)*1}`})
+        await tx.wait()
+
+        tx = await canaryFacet.connect(accounts[5]).verifyRight(rights[2], accounts[6].address)
+        await tx.wait()
+
+        await expect(
+            canaryFacet.connect(accounts[5]).verifyRight(rights[2], accounts[6].address)
+        ).to.be.revertedWith('rightid and right holder are already validated')
+
+        let verified = await canaryFacet.connect(accounts[5]).verified(rights[2], accounts[6].address)
+        
+        assert.equal(verified, true)
+
+        let balance = await canaryToken.balanceOf(accounts[6].address)
+
+        assert.equal(balance, dailyPrice/2)
+        
     })
 })
