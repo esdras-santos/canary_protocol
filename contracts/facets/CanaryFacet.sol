@@ -18,6 +18,7 @@ contract CanaryFacet {
 
     event GetRight(uint256 indexed _rightid, uint256 indexed _period, address indexed _who);
     event DepositedNFT(address indexed _erc721, uint256 indexed _nftid);
+    event RoyaltiesWithdraw(address indexed owner, uint256 indexed amount);
 
     modifier isNFTOwner(uint256 _rightid){
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
@@ -67,37 +68,39 @@ contract CanaryFacet {
         emit DepositedNFT(_erc721, _nftid);
     }
 
+    // due to his high complexity (O(N^2)) this function is only viable in StarkNet
     function withdrawRoyalties(
-        uint256 _rightid, 
-        address[] memory _deadlinelist,
-        uint256[] memory _roindexes,
-        uint256[] memory _rhindexes) 
+        uint256 _rightid) 
         external isNFTOwner(_rightid)
     {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        require(ds.rightHolders[_rightid].length > 0, "right does not exists");
         uint256 amountToWithdraw = 0;
-        for(uint256 i; i < _deadlinelist.length; i++){
-            require(ds.deadline[_rightid][_deadlinelist[i]] < block.timestamp, "NFT do not exceeded the deadline yet");
-            require(ds.rightsOver[_deadlinelist[i]][_roindexes[i]] == _rightid, "wrong index for rightid");
-            require(ds.rightHolders[_rightid][_rhindexes[i]] == _deadlinelist[_deadlinelist.length-1-i],"right holder address and deadline list address is not equal");
-            require(ds.deadline[_rightid][_deadlinelist[i]] > 0, "NFT deadline needs to be above zero");
+        uint256 j = 0;
+        while(ds.rightHolders[_rightid].length > 0){
+            uint256 deadline = ds.deadline[_rightid][ds.rightHolders[_rightid][j]];
+            uint256 rightsPeriod = ds.rightsPeriod[_rightid][ds.rightHolders[_rightid][j]];
+            if(deadline < block.timestamp){
+                uint256 amount = (ds.dailyPrice[_rightid] * rightsPeriod);
+                // subtract the fee
+                amountToWithdraw += amount - (amount * 500 / 10000);  
+                for(uint256 i; i < ds.rightsOver[ds.rightHolders[_rightid][j]].length; i++){
+                    if(ds.rightsOver[ds.rightHolders[_rightid][j]][i] == _rightid){
+                        ds.rightsOver[ds.rightHolders[_rightid][j]][i] = ds.rightsOver[ds.rightHolders[_rightid][j]][ds.rightsOver[ds.rightHolders[_rightid][j]].length -1];
+                        ds.rightsOver[ds.rightHolders[_rightid][j]].pop();  
+                        break;          
+                    }
+                } 
+                ds.deadline[_rightid][ds.rightHolders[_rightid][j]] = 0;
+                ds.rightsPeriod[_rightid][ds.rightHolders[_rightid][j]] = 0;
 
-            uint256 amount = (ds.dailyPrice[_rightid] * ds.rightsPeriod[_rightid][_deadlinelist[i]]);
-            // subtract the fee
-            amountToWithdraw += amount - (amount * 500 / 10000);
-            
-            ds.rightsOver[_deadlinelist[i]][_roindexes[i]] = ds.rightsOver[_deadlinelist[i]][ds.rightsOver[_deadlinelist[i]].length -1];
-            ds.rightsOver[_deadlinelist[i]].pop();
-            
-            ds.rightHolders[_rightid][_rhindexes[i]] = ds.rightHolders[_rightid][ds.rightHolders[_rightid].length -1];
-            ds.rightHolders[_rightid].pop();
+                ds.rightHolders[_rightid][j] = ds.rightHolders[_rightid][ds.rightHolders[_rightid].length -1];  
+                ds.rightHolders[_rightid].pop();
 
-            ds.deadline[_rightid][_deadlinelist[i]] = 0;
-            ds.rightsPeriod[_rightid][_deadlinelist[i]] = 0;
-
-            ds.maxRightsHolders[_rightid] = ds.maxRightsHolders[_rightid] + 1;
-
+                ds.maxRightsHolders[_rightid] = ds.maxRightsHolders[_rightid] + 1;
+            }
         }
+        emit RoyaltiesWithdraw(msg.sender, amountToWithdraw);
         payable(msg.sender).transfer(amountToWithdraw);
     }
 

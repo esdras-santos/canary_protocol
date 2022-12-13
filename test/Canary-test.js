@@ -46,7 +46,41 @@ describe('Canary protocol test', async function(){
         await tx.wait()
         tx = await canaryFacet.depositNFT(collectionAddress, '1', '9000000000000000', '30', '10')
         await tx.wait()
-        tx = await canaryFacet.depositNFT(collectionAddress, '2', '20000000000000000', '30', '1')
+        tx = await canaryFacet.depositNFT(collectionAddress, '2', '20000000000000000', '30', '2')
+        await tx.wait()
+        rights = await canaryFacet.getAvailableNFTs()
+    })
+
+    beforeEach(async function(){
+        diamondAddress = await deployDiamond()
+        canaryTokenAddress = await deployCanaryToken(diamondAddress)
+        canaryToken = await ethers.getContractAt('CanaryToken', canaryTokenAddress)
+        canaryFacet = await ethers.getContractAt('CanaryFacet', diamondAddress)
+        collectionAddress = await deployCollection()
+        collection = await ethers.getContractAt('Dungeon', collectionAddress)
+        let tx
+        
+        tx = await collection.createCollectible("ipfs://bafkreihxwh3yekjq2bakdje4okxpdlsdqlua4jur4iogv2kbyzr6lnawkm")
+        await tx.wait()
+
+        tx = await collection.createCollectible("ipfs://bafkreihps5wq65dnaqxs4tgefoqy3qceqm7yl6x3cc7m4ztdqvrflskg2e")
+        await tx.wait()
+
+        tx = await collection.createCollectible("ipfs://bafkreiagwvhiyoo3hmoglboczeexmphmnrelrh4dvbfh6agjm3oqewfoya")
+        await tx.wait()
+
+        tx = await collection.approve(diamondAddress, '0')
+        await tx.wait()
+        tx = await collection.approve(diamondAddress, '1')
+        await tx.wait()
+        tx = await collection.approve(diamondAddress, '2')
+        await tx.wait()
+
+        tx = await canaryFacet.depositNFT(collectionAddress, '0', '3000000000000000', '30', '10')
+        await tx.wait()
+        tx = await canaryFacet.depositNFT(collectionAddress, '1', '9000000000000000', '30', '10')
+        await tx.wait()
+        tx = await canaryFacet.depositNFT(collectionAddress, '2', '20000000000000000', '30', '2')
         await tx.wait()
         rights = await canaryFacet.getAvailableNFTs()
     })
@@ -69,7 +103,7 @@ describe('Canary protocol test', async function(){
         availableRights = await canaryFacet.availableRightsOf(rights[1])
         assert.equal(availableRights, 10)
         availableRights = await canaryFacet.availableRightsOf(rights[2])
-        assert.equal(availableRights, 1)
+        assert.equal(availableRights, 2)
 
         let rightsPrice
         rightsPrice = await canaryFacet.dailyPriceOf(rights[0])
@@ -117,8 +151,11 @@ describe('Canary protocol test', async function(){
         tx = await canaryFacet.connect(accounts[1]).getRights(rights[2], '30', {value: `${Number(dailyPrice)*30}`})
         await tx.wait()
 
+        tx = await canaryFacet.connect(accounts[2]).getRights(rights[2], '30', {value: `${Number(dailyPrice)*30}`})
+        await tx.wait()
+
         await expect(
-            canaryFacet.connect(accounts[2]).getRights(rights[2], '30', {value: `${Number(dailyPrice)*30}`})
+            canaryFacet.connect(accounts[3]).getRights(rights[2], '30', {value: `${Number(dailyPrice)*30}`})
         ).to.be.revertedWith('limit of right holders reached')
 
         dailyPrice = await canaryFacet.dailyPriceOf(rights[1])
@@ -196,50 +233,28 @@ describe('Canary protocol test', async function(){
         assert.equal(accounts[3].address, rightHolders[2])
 
         await expect(
-            canaryFacet.withdrawRoyalties(rights[0], [accounts[3].address], [2], [2])
-        ).to.be.revertedWith('NFT do not exceeded the deadline yet')
+            canaryFacet.withdrawRoyalties(rights[1])
+        ).to.be.revertedWith('right does not exists')
 
         var currentDateTime = new Date();
         await network.provider.send("evm_setNextBlockTimestamp", [(currentDateTime.getTime()/ 1000) + (86400 * 30)])
         await network.provider.send("evm_mine")
         const latestBlock = await ethers.provider.getBlock("latest")
         
-        await expect(
-            canaryFacet.withdrawRoyalties(rights[1], [accounts[3].address], [0], [0])
-        ).to.be.revertedWith('wrong index for rightid')
-
-        await expect(
-            canaryFacet.withdrawRoyalties(rights[0], [accounts[3].address], [0], [1])
-        ).to.be.revertedWith('right holder address and deadline list address is not equal')
-
-        let deadlineList = []
-        let rhindexes = []
-        let roIndexes = []
-        let confirmedRoyalties = 0
-        let i = 0
+        let expectedRoyaltie = 0
         for(rh of rightHolders){
             let deadline = await canaryFacet.holderDeadline(rights[0], rh)
             let rightsPeriod = await canaryFacet.rightsPeriodOf(rights[0], rh)
-            let currentrhlength = rightHolders.length
             if(Number(deadline) < Number(latestBlock.timestamp)){
-                currentrhlength--
-                deadlineList.push(rh)
-                rhindexes.push(currentrhlength - i)
-                confirmedRoyalties += Number(dailyPrice) * Number(rightsPeriod)
-                let rightsOver = await canaryFacet.rightsOf(rh) 
-                let j = 0
-                
-                for(ro of rightsOver){
-                    if(ro.toString() === rights[0].toString()){
-                        roIndexes.push(j)
-                    }
-                    j++
-                }
+                let amount = Number(dailyPrice) * Number(rightsPeriod)
+                expectedRoyaltie += amount - (amount * 500 / 10000)  
+                 
             }
-            i++
         }
-        tx = await canaryFacet.withdrawRoyalties(rights[0], deadlineList, roIndexes, rhindexes)
-        await tx.wait()
+        
+        await expect(canaryFacet.withdrawRoyalties(rights[0]))
+            .to.emit(canaryFacet, 'RoyaltiesWithdraw')
+            .withArgs(owner.address, expectedRoyaltie.toString())
         
     })
 
